@@ -19,7 +19,8 @@
 #include <limits>
 #include "livox_laser_simulation/csv_reader.hpp"
 #include "livox_laser_simulation/livox_ode_multiray_shape.h"
-#include "livox_laser_simulation/livox_point_xyzrtl.h"
+#include "livox_laser_simulation/livox_point_xyzrtlt.h"
+#include "livox_laser_simulation/livox_point_xyzrtrt.h"
 
 namespace gazebo {
 
@@ -117,6 +118,9 @@ void LivoxPointsPlugin::Load(gazebo::sensors::SensorPtr _parent, sdf::ElementPtr
         case livox_laser_simulation_CUSTOM_MSG:
             rosPointPub = rosNode->advertise<livox_laser_simulation::CustomMsg>(curr_scan_topic, 5);
             break;
+        case SENSOR_MSG_POINT_CLOUD2_LIVOXPOINTXYZRTRT:
+            rosPointPub = rosNode->advertise<sensor_msgs::PointCloud2>(curr_scan_topic, 5);
+            break;
         default:
             break;
     }
@@ -162,6 +166,9 @@ void LivoxPointsPlugin::OnNewLaserScans() {
                 break;
             case livox_laser_simulation_CUSTOM_MSG:
                 PublishLivoxROSDriverCustomMsg(points_pair);
+                break;
+            case SENSOR_MSG_POINT_CLOUD2_LIVOXPOINTXYZRTRT:
+                PublishPointCloud2XYZRTRT(points_pair);
                 break;
             default:
                 break;
@@ -521,6 +528,75 @@ void LivoxPointsPlugin::PublishPointCloud2XYZRTLT(std::vector<std::pair<int, Avi
             pt.tag = 0;
             pt.line = pair.second.line;
             pt.timestamp = static_cast<double>(1e9/200000*i)+header_timestamp_sec_nsec;    
+
+            pc.push_back(std::move(pt));
+        }
+    }
+    pcl::toROSMsg(pc, scan_point);
+    scan_point.header.stamp = header_timestamp;
+    scan_point.header.frame_id = frameName;
+    rosPointPub.publish(scan_point);
+    ros::spinOnce();
+    if (scanPub && scanPub->HasConnections() && visualize) {
+        scanPub->Publish(laserMsg);
+    }
+}
+
+void LivoxPointsPlugin::PublishPointCloud2XYZRTRT(std::vector<std::pair<int, AviaRotateInfo>> &points_pair) {
+    auto rayCount = RayCount();
+    auto verticalRayCount = VerticalRayCount();
+    auto angle_min = AngleMin().Radian();
+    auto angle_incre = AngleResolution();
+    auto verticle_min = VerticalAngleMin().Radian();
+    auto verticle_incre = VerticalAngleResolution();
+
+    msgs::LaserScan *scan = laserMsg.mutable_scan();
+    InitializeScan(scan);
+    // SendRosTf(parentEntity->WorldPose(), world->Name(), raySensor->ParentName());
+
+    sensor_msgs::PointCloud2 scan_point;
+
+    pcl::PointCloud<pcl::LivoxPointXyzrtrt> pc;
+    pc.points.reserve(points_pair.size());
+    ros::Time header_timestamp = ros::Time::now();
+    auto header_timestamp_sec_nsec = header_timestamp.toNSec();
+
+    
+    // auto start = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    for (int i = 0; i < points_pair.size(); ++i) {
+        std::pair<int, AviaRotateInfo> &pair = points_pair[i];
+        int verticle_index = roundf((pair.second.zenith - verticle_min) / verticle_incre);
+        int horizon_index = roundf((pair.second.azimuth - angle_min) / angle_incre);
+        if (verticle_index < 0 || horizon_index < 0) {
+            continue;
+        }
+        if (verticle_index < verticalRayCount && horizon_index < rayCount) {
+            auto index = (verticalRayCount - verticle_index - 1) * rayCount + horizon_index;
+            auto range = rayShape->GetRange(pair.first);
+            auto intensity = rayShape->GetRetro(pair.first);
+            if (range >= maxDist || range <= minDist|| abs(range) <= 1e-5) {
+                range = 0.0;
+            }
+            scan->set_ranges(index, range);
+            scan->set_intensities(index, intensity);
+
+            auto rotate_info = pair.second;
+            ignition::math::Quaterniond ray;
+            ray.Euler(ignition::math::Vector3d(0.0, rotate_info.zenith, rotate_info.azimuth));
+            //                auto axis = rotate * ray * math::Vector3(1.0, 0.0, 0.0);
+            //                auto point = range * axis + world_pose.Pos();
+
+            auto axis = ray * ignition::math::Vector3d(1.0, 0.0, 0.0);
+            auto point = range * axis;
+            pcl::LivoxPointXyzrtrt pt;
+            
+            pt.x = point.X();
+            pt.y = point.Y();
+            pt.z = point.Z();
+            pt.intensity = static_cast<float>(intensity);
+            pt.tag = 0;
+            pt.ring = pair.second.line;
+            pt.time = static_cast<double>(1e9/200000*i)+header_timestamp_sec_nsec;    
 
             pc.push_back(std::move(pt));
         }

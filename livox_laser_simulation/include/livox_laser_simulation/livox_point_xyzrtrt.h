@@ -1,13 +1,13 @@
 
   
 /*
- * Created on Sun Aug 15 2021
+ * Created on Sun Dec 17 2024
  *
- * Author: EpsAvlc
+ * Author: stavrako
  */
 
-#ifndef LIVOX_LASER_SIMULATION_LIVOX_POINT_XYZRTL_H_
-#define LIVOX_LASER_SIMULATION_LIVOX_POINT_XYZRTL_H_
+#ifndef LIVOX_LASER_SIMULATION_LIVOX_POINT_XYZRTRT_H_
+#define LIVOX_LASER_SIMULATION_LIVOX_POINT_XYZRTRT_H_
 
 #define PCL_NO_PRECOMPILE
 
@@ -16,29 +16,29 @@
 #include <pcl/point_types.h>
 
 namespace pcl{
-struct LivoxPointXyzrtlt{
+struct LivoxPointXyzrtrt{
   float x;            /**< x             */
   float y;            /**< y             */
   float z;            /**< z             */
   
-  float intensity; /**< intensity   */
+  float intensity;    /**< intensity   */
   uint8_t tag;        /**< Livox point tag   */
-  uint8_t line;       /**< Laser line id     */
-  double timestamp; /**< Timestamp         */
+  uint8_t ring;       /**< Laser ring id     */
+  double time;        /**< Time         */
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
   EIGEN_ALIGN16;
 };
 
 }
 
-POINT_CLOUD_REGISTER_POINT_STRUCT (LivoxPointXyzrtlt,  
+POINT_CLOUD_REGISTER_POINT_STRUCT (LivoxPointXyzrtrt,  
                                    (float, x, x)
                                    (float, y, y)
                                    (float, z, z)
                                    (float, intensity, intensity)
                                    (uint8_t, tag, tag)
-                                   (uint8_t, line, line)
-                                   (double, timestamp, timestamp)
+                                   (uint8_t, ring, ring)
+                                   (double, time, time)
 )
 
 #endif
